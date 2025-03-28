@@ -1,0 +1,11 @@
+beautifulsoup4
+faiss-cpu
+huggingface-hub
+langchain
+langchain-text-splitters
+langchain-community
+langchain-huggingface
+PyPDF2
+streamlit
+torch
+transformers
