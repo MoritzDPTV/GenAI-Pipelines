@@ -60,11 +60,15 @@ def textPreprocessing(input_type, input_data):
 # initialize the vectorstore according to hugging face embeddings
 def initVectorstore():
     # initialize hugging face embedding function
-    hf_embeddings = HuggingFaceEmbeddings(
-        model_name=embedding_model_name,
-        model_kwargs=embedding_model_kwargs,
-        encode_kwargs=encode_kwargs
-    )
+    try:
+        hf_embeddings = HuggingFaceEmbeddings(
+            model_name=embedding_model_name,
+            model_kwargs=embedding_model_kwargs,
+            encode_kwargs=encode_kwargs
+        )
+    except Exception as e:
+        st.error(f"An error occurred while loading the model: {str(e)}")
+        st.stop()
 
     # create faiss index and vectorstore
     index = faiss.IndexFlatL2(len(hf_embeddings.embed_query("sample text")))
@@ -90,9 +94,14 @@ def queryLLM(vectorstore, query):
         )
         qa = RetrievalQA.from_chain_type(llm=llm, retriever=vectorstore.as_retriever())
         result = qa.invoke(query)
-        return result["result"]
+        try:
+            return result["result"]
+        except:
+            st.error(f"An error occurred while querying: {str(result)}")
+            st.stop()
     except Exception as e:
         st.error(f"An error occurred while querying: {str(e)}")
+        st.stop()
 
 
 ### chatbot ###

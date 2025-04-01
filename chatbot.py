@@ -24,7 +24,7 @@ if local:
     task = "text-generation"
     device = torch.device("cpu")
 else:
-    model_name = "meta-llama/Llama-3.3-70B-Instruct"
+    model_name = "Qwen/Qwen2.5-72B-Instruct"
     max_new_tokens = 512
     temperature = 0.8
 
@@ -41,12 +41,16 @@ st.title("Chatbot")
 # initialize model or client
 if local:
     # download and prepare models
-    if "model" not in st.session_state:
+    if "model" not in st.session_state or "tokenizer" not in st.session_state:
         # show message that model is loading
         with st.spinner("Downloading and preparing the local models..."):
             # download models
-            st.session_state["model"] = AutoModelForCausalLM.from_pretrained(model_name, token=api_key)
-            st.session_state["tokenizer"] = AutoTokenizer.from_pretrained(model_name, token=api_key)
+            try:
+                st.session_state["model"] = AutoModelForCausalLM.from_pretrained(model_name, token=api_key)
+                st.session_state["tokenizer"] = AutoTokenizer.from_pretrained(model_name, token=api_key)
+            except Exception as e:
+                st.error(f"An error occurred while loading the model: {str(e)}")
+                st.stop()
 
     # initialize llm pipeline
     llm = pipeline(
@@ -89,7 +93,7 @@ else:
 
 # query llm if new prompt from user entered
 if st.session_state.prompt:
-    # reload page to disable chat
+    # reload page to disable prompt bar
     if not st.session_state.is_processing:
         st.session_state.is_processing = True
         st.rerun()
@@ -99,27 +103,37 @@ if st.session_state.prompt:
         st.markdown(st.session_state.prompt)
         st.session_state.chat_history.append({"role": "user", "content": st.session_state.prompt})
 
-    # query answer from llm
+    # query answer from local or online llm
     if local:
         response = llm(
             text_inputs=st.session_state.chat_history,
             max_new_tokens=max_new_tokens,
             temperature=temperature
-        )[0]["generated_text"][-1]["content"]
+        )
+        response = response[0]["generated_text"][-1]["content"]
     else:
-        response = client.chat.completions.create(
-            model=model_name,
-            temperature=temperature,
-            messages=st.session_state.chat_history,
-            max_tokens=max_new_tokens,
-        )["choices"][0]["message"]["content"]
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                temperature=temperature,
+                messages=st.session_state.chat_history,
+                max_tokens=max_new_tokens,
+            )
+            try:
+                response = response["choices"][0]["message"]["content"]
+            except:
+                st.error(f"An error occurred while querying: {str(response)}")
+                st.stop()
+        except Exception as e:
+            st.error(f"An error occurred while querying: {str(e)}")
+            st.stop()
 
     # show message from assistant and append it to the chat history
     with st.chat_message("assistant"):
         st.markdown(response)
         st.session_state.chat_history.append({"role": "assistant", "content": response})
 
-    # reload page to enable chat
+    # reload page to enable prompt bar
     st.session_state.is_processing = False
     st.session_state.prompt = None
     st.rerun()

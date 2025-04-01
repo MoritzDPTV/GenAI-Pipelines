@@ -14,9 +14,9 @@ headers = {"Authorization": f"Bearer {HUGGINGFACEHUB_API_TOKEN}"}
 max_new_tokens = 512
 temperature = 0.8
 model_api_url_img2text = "https://router.huggingface.co/hf-inference/models/Salesforce/blip-image-captioning-base"
-model_api_url_textGen = "https://router.huggingface.co/hf-inference/models/meta-llama/Llama-3.3-70B-Instruct/v1/chat/completions"
+model_api_url_textGen = "https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions"
+model_api_url_text2image = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
 model_api_url_text2audio = "https://router.huggingface.co/hf-inference/models/facebook/musicgen-small"
-model_api_url_text2image = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
 
 
 ### pipeline ###
@@ -43,17 +43,22 @@ with st.form(key="input_image", clear_on_submit=True, border=False):
                 st.image(selected_image, use_container_width=True)
 
             # run image to text model
-            image_description = requests.post(
+            response = requests.post(
                 model_api_url_img2text,
                 headers={"Content-Type": "image/jpeg", **headers},
                 data=selected_image
-            ).json()[0]["generated_text"]
+            )
+            try:
+                response = response.json()[0]["generated_text"]
+            except:
+                st.error(f"An error occurred while querying img2text model: '{response}, {response.reason}'")
+                st.stop()
             with st.expander("Image Description Generated from the Provided Image", expanded=True):
-                st.write(image_description)
+                st.write(response)
 
             # run text generation model
-            prompt = f"In one sentence, tell a story about {image_description}."
-            story = requests.post(
+            prompt = f"In one sentence, tell a story about {response}."
+            response = requests.post(
                 model_api_url_textGen,
                 headers=headers,
                 json={
@@ -61,30 +66,50 @@ with st.form(key="input_image", clear_on_submit=True, border=False):
                     "max_tokens": max_new_tokens,
                     "temperature": temperature
                 }
-            ).json()["choices"][0]["message"]["content"]
+            )
+            try:
+                response = response.json()["choices"][0]["message"]["content"]
+            except:
+                st.error(f"An error occurred while querying text generation model: '{response}, {response.reason}'")
+                st.stop()
             with st.expander("Story Generated from the Image Description", expanded=True):
-                st.write(story)
+                st.write(response)
 
             # run text to image model
-            illustration_visual = requests.post(
+            response_img = requests.post(
                 model_api_url_text2image,
                 headers=headers,
-                json={"inputs": story, "temperature": temperature}
-            ).content
+                json={"inputs": response, "temperature": temperature}
+            )
+            try:
+                if "error" in str(response_img.content):
+                    raise Exception()
+                response_img = response_img.content
+            except Exception as e:
+                st.error(f"An error occurred while querying text2img model: '{response_img}, {response_img.reason}'")
+                st.stop()
             with st.expander("Image Generated from the Story", expanded=True):
                 try:
-                    st.image(illustration_visual, use_container_width=True)
+                    st.image(response_img, use_container_width=True)
                 except:
-                    st.error("Error receiving the image. Please try again.")
+                    st.error(f"Error receiving the image. Please try again.")
+                    st.stop()
 
             # run text to audio model
-            illustration_audio = requests.post(
+            response_audio = requests.post(
                 model_api_url_text2audio,
                 headers=headers,
-                json={"inputs": story, "temperature": temperature}
-            ).content
+                json={"inputs": response, "temperature": temperature}
+            )
+            try:
+                if "error" in str(response_audio.content):
+                    raise Exception()
+                response_audio = response_audio.content
+            except:
+                st.error(f"An error occurred while querying text2audio model: '{response_audio}, {response_audio.reason}'")
+                st.stop()
             with st.expander("Audio Generated from the Story", expanded=True):
-                st.audio(illustration_audio)
+                st.audio(response_audio)
         else:
             # show message that image must be provided
             st.error("Please provide an image to proceed.")
@@ -108,4 +133,3 @@ with st.form(key="input_image", clear_on_submit=True, border=False):
             st.markdown("")
         with st.expander("Audio Generated from the Story", expanded=False):
             st.markdown("")
-
